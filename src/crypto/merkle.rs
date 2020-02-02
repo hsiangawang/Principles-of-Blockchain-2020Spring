@@ -3,27 +3,116 @@ use super::hash::{Hashable, H256};
 /// A Merkle tree.
 #[derive(Debug, Default)]
 pub struct MerkleTree {
+    level_hashes: Vec<Vec<H256>>,
+    Root: H256,
 }
 
 impl MerkleTree {
+
     pub fn new<T>(data: &[T]) -> Self where T: Hashable, {
-        unimplemented!()
+        
+        let mut level_hash: Vec<H256> = Vec::new();
+        let mut level_hashes : Vec<Vec<H256>> = Vec::new();
+        
+        for it in data.iter() {
+            level_hash.push(it.hash());
+        }
+
+        /*for i in level_hash{
+            println!("{:?}", i);
+        }*/
+
+        if(level_hash.len() != 1 && (level_hash.len())%2 == 1)
+        {
+            level_hash.push(level_hash[level_hash.len()-1]);
+        }
+
+        while level_hash.len() != 1 {
+            
+            let cur_size = level_hash.len();
+            level_hashes.push(level_hash.clone());
+
+            for i in (0..cur_size).step_by(2) {
+                
+                
+                let tmp1 = level_hash[i].clone();
+                let tmp2 = level_hash[i+1].clone();
+                let v1 = tmp1.as_ref();
+                let v2 = tmp2.as_ref();
+                let concatenation = [v1, v2].concat();
+                //println!("{:?}", &concatenation);
+
+                let hash_value = ring::digest::digest(&ring::digest::SHA256, &concatenation);
+                let new_hash = H256::from(hash_value);
+                //println!("{}", new_hash);
+                level_hash.push(new_hash.clone());
+            }
+            level_hash = level_hash[cur_size..].to_vec();
+        }
+        level_hashes.push(level_hash.clone());
+        //println!("{:?}", level_hash[0]);
+        Self{level_hashes : level_hashes, Root : level_hash[0]}
+        
     }
 
     pub fn root(&self) -> H256 {
-        unimplemented!()
+        return self.Root;
     }
 
     /// Returns the Merkle Proof of data at index i
     pub fn proof(&self, index: usize) -> Vec<H256> {
-        unimplemented!()
+        
+        let mut proofs: Vec<H256> = Vec::new();
+        let levels = self.level_hashes.len();
+        let mut Idx = index;
+
+        for i in 0..(levels-1) {
+            let quotient = Idx/2;
+            let remain = Idx%2;
+
+            if remain == 0 {
+                proofs.push(self.level_hashes[i][2*quotient + 1].clone());
+            }
+            else {
+                proofs.push(self.level_hashes[i][2*quotient].clone());
+            }
+            Idx /= 2;
+        }
+
+        return proofs;
     }
 }
 
 /// Verify that the datum hash with a vector of proofs will produce the Merkle root. Also need the
 /// index of datum and `leaf_size`, the total number of leaves.
 pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
-    unimplemented!()
+    
+    //unimplmented!()
+    let proof_num = proof.len();
+    let mut cur_hash = datum.clone();
+    let mut Idx = index;
+    let mut concatenation =  [cur_hash.as_ref(), cur_hash.as_ref()].concat();
+
+    for i in (0..proof_num) {
+        if(Idx % 2 == 0)
+        {
+            concatenation = [cur_hash.as_ref(), proof[i].as_ref()].concat();
+        }
+        else
+        {
+            concatenation = [proof[i].as_ref(), cur_hash.as_ref()].concat();
+        }
+        let hash_value = ring::digest::digest(&ring::digest::SHA256, &concatenation);
+        cur_hash = H256::from(hash_value);
+        Idx /= 2;
+    }
+    if cur_hash == *root {
+        return true;
+    }
+    else {
+        return false;
+    }
+
 }
 
 #[cfg(test)]
@@ -43,6 +132,8 @@ mod tests {
     #[test]
     fn root() {
         let input_data: Vec<H256> = gen_merkle_tree_data!();
+        //let test = input_data[0].hash();
+        //println!("{}", input_data.capacity());
         let merkle_tree = MerkleTree::new(&input_data);
         let root = merkle_tree.root();
         assert_eq!(
