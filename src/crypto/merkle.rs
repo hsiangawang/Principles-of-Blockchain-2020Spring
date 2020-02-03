@@ -28,6 +28,11 @@ impl MerkleTree {
         }
 
         while level_hash.len() != 1 {
+
+            if(level_hash.len() % 2 != 0)
+            {
+                level_hash.push(level_hash[level_hash.len()-1]);
+            }
             
             let cur_size = level_hash.len();
             level_hashes.push(level_hash.clone());
@@ -46,6 +51,7 @@ impl MerkleTree {
                 let new_hash = H256::from(hash_value);
                 //println!("{}", new_hash);
                 level_hash.push(new_hash.clone());
+
             }
             level_hash = level_hash[cur_size..].to_vec();
         }
