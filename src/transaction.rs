@@ -3,7 +3,7 @@ use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm,
 
 
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
     Input : u8,
     Output : u8,
@@ -37,7 +37,7 @@ pub fn verify(t: &Transaction, public_key: &<Ed25519KeyPair as KeyPair>::PublicK
 }
 
 #[cfg(any(test, test_utilities))]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::crypto::key_pair;
 

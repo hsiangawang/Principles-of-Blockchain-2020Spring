@@ -1,13 +1,46 @@
 use serde::{Serialize, Deserialize};
 use crate::crypto::hash::{H256, Hashable};
+use crate::crypto::merkle::{MerkleTree};
+use crate::transaction::{Transaction};
+use crate::transaction::tests::generate_random_transaction;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
+	pub header : Header,
+	pub content : Content,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Header {
+	pub parent : H256,
+	pub nonce : u32,
+	pub difficulty : H256,
+	pub timestamp : u64,
+	pub merkle_root : H256,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Content {
+	pub data : Vec<Transaction>,
+}
+
+impl Hashable for Transaction {
+    fn hash(&self) -> H256 {
+    	let encoded = bincode::serialize(&self).unwrap();
+        ring::digest::digest(&ring::digest::SHA256, &encoded).into()
+    }
+}
+
+impl Hashable for Header {
+    fn hash(&self) -> H256 {
+        let encoded = bincode::serialize(&self).unwrap();
+        ring::digest::digest(&ring::digest::SHA256, &encoded).into()
+    }
 }
 
 impl Hashable for Block {
     fn hash(&self) -> H256 {
-        unimplemented!()
+        self.header.hash()
     }
 }
 
@@ -15,8 +48,23 @@ impl Hashable for Block {
 pub mod test {
     use super::*;
     use crate::crypto::hash::H256;
+    extern crate rand;
+    use rand::Rng;
 
     pub fn generate_random_block(parent: &H256) -> Block {
-        unimplemented!()
+        
+        let mut rng = rand::thread_rng();
+    	let nonce : u32 = rng.gen();
+    	let Parent = parent.clone();
+    	let mut difficulty_glob = hex!("0101010101010101010101010101010101010101010101010101010101010202").into();
+    	let mut clock_glob = 1;
+    	let mut transactions: Vec<Transaction> = Vec::new();
+    	transactions.push(generate_random_transaction());
+    	let merkle_tree = MerkleTree::new(&transactions);
+    	let root = merkle_tree.root();
+ 
+    	let header = Header{parent : Parent, nonce : nonce, difficulty : difficulty_glob, timestamp : clock_glob, merkle_root : root};
+    	let content = Content{data : transactions};
+    	return Block{header : header, content : content};
     }
 }

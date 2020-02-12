@@ -31,6 +31,7 @@ impl MerkleTree {
 
             if(level_hash.len() % 2 != 0)
             {
+                //println!("{:?}", "odd!");
                 level_hash.push(level_hash[level_hash.len()-1]);
             }
             
@@ -56,9 +57,8 @@ impl MerkleTree {
             level_hash = level_hash[cur_size..].to_vec();
         }
         level_hashes.push(level_hash.clone());
-        //println!("{:?}", level_hash[0]);
+        //println!("{:?}", level_hashes[2].len());
         Self{level_hashes : level_hashes, Root : level_hash[0]}
-        
     }
 
     pub fn root(&self) -> H256 {
@@ -93,7 +93,6 @@ impl MerkleTree {
 /// index of datum and `leaf_size`, the total number of leaves.
 pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
     
-    //unimplmented!()
     let proof_num = proof.len();
     let mut cur_hash = datum.clone();
     let mut Idx = index;
@@ -112,13 +111,16 @@ pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size
         cur_hash = H256::from(hash_value);
         Idx /= 2;
     }
+
     if cur_hash == *root {
+        println!("{}", "true");
         return true;
     }
     else {
+        println!("{}", "false");
         return false;
     }
-
+    
 }
 
 #[cfg(test)]
@@ -134,6 +136,20 @@ mod tests {
             ]
         }};
     }
+
+    macro_rules! gen_merkle_tree_data_v1 {
+        () => {{
+            vec![
+                (hex!("0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d")).into(),
+                (hex!("0101010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("010101010101010101010101010101010101010101010101010101010101020a")).into(),
+                (hex!("010101010101010101010101010101010101010101010101010101010101020f")).into(),
+                (hex!("01010101010101010101010101010101010101010101010101010101010102aa")).into(),
+                (hex!("01010101010101010101010101010101010101010101010101010101010102ff")).into(),
+                (hex!("0101010101010101010101010101010101010101010101010101010101010aaa")).into(),
+            ]
+        }};
+    }    
 
     #[test]
     fn root() {
@@ -169,7 +185,8 @@ mod tests {
 
     #[test]
     fn verifying() {
-        let input_data: Vec<H256> = gen_merkle_tree_data!();
+        //let input_data: Vec<H256> = gen_merkle_tree_data!();
+        let input_data: Vec<H256> = gen_merkle_tree_data_v1!();
         let merkle_tree = MerkleTree::new(&input_data);
         let proof = merkle_tree.proof(0);
         assert!(verify(&merkle_tree.root(), &input_data[0].hash(), &proof, 0, input_data.len()));
