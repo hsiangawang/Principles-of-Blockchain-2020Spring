@@ -49,8 +49,8 @@ pub mod tests {
         let mut rng = rand::thread_rng();
         let In : u8 = rng.gen();
         let Out : u8 = rng.gen();
-        println!("{:?}", In);
-        println!("{:?}", Out);
+        //println!("{:?}", In);
+        //println!("{:?}", Out);
         let transaction = Transaction{Input: In, Output: Out};
         return transaction;
         //unimplemented!()

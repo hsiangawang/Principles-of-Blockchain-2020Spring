@@ -9,10 +9,10 @@ extern crate rand;
 use rand::Rng;
 
 pub struct Blockchain {
-    hash_blocks : BTreeMap<H256, Block>,
+    hash_blocks : HashMap<H256, Block>,
     genesis : Block,
     tip : H256,
-    blocks_height : BTreeMap<H256, u8>,
+    blocks_height : HashMap<H256, u8>,
     next_len : u8,
 }
 
@@ -20,8 +20,8 @@ impl Blockchain {
     /// Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
 
-        let mut hash_blocks: BTreeMap<H256, Block> = BTreeMap::new();
-        let mut blocks_height: BTreeMap<H256, u8> = BTreeMap::new();
+        let mut hash_blocks: HashMap<H256, Block> = HashMap::new();
+        let mut blocks_height: HashMap<H256, u8> = HashMap::new();
         let mut tip : H256;
         let mut next_len = 1;
 
@@ -42,7 +42,7 @@ impl Blockchain {
         blocks_height.insert(genesis_block.hash(), next_len);
         next_len += 1;
 
-        println!("{:?}", tip);
+        //println!("{:?}", tip);
         return Self{hash_blocks : hash_blocks, genesis : genesis_block, tip : tip, blocks_height : blocks_height, next_len : next_len};
         
     }
@@ -50,7 +50,9 @@ impl Blockchain {
     /// Insert a block into blockchain
     pub fn insert(&mut self, block: &Block) {
         self.hash_blocks.insert(block.hash(), block.clone());
-        self.blocks_height.insert(block.hash(), self.next_len);
+        let parent_height = self.blocks_height[&block.header.parent];
+        self.blocks_height.insert(block.hash(), parent_height + 1);
+        //self.blocks_height.insert(block.hash(), self.next_len);
         if(self.blocks_height[&block.hash()] > self.blocks_height[&self.tip])
         {
             self.tip = block.hash();
@@ -68,10 +70,17 @@ impl Blockchain {
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
         let mut longest_chain: Vec<H256> = Vec::new();
 
-        for (key, value) in self.hash_blocks.iter()
+        let mut pointer : H256 = self.tip;
+        
+        let genesis_parent = hex!("0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0a").into();
+
+        while pointer != genesis_parent
         {
-            longest_chain.push(value.hash());
+            longest_chain.push(pointer.clone());
+            let cur_block : Block = self.hash_blocks[&pointer].clone();
+            pointer = cur_block.header.parent;
         }
+        longest_chain.reverse();
 
         return longest_chain;
     }
@@ -85,11 +94,41 @@ mod tests {
 
     #[test]
     fn insert_one() {
+        println!("{:?}", "Start testing!!!");
         let mut blockchain = Blockchain::new();
         let genesis_hash = blockchain.tip();
         let block = generate_random_block(&genesis_hash);
+        println!("{:?}", block.hash());
         blockchain.insert(&block);
         assert_eq!(blockchain.tip(), block.hash());
+        // additional test
+        let block_2 = generate_random_block(&block.hash());
+        blockchain.insert(&block_2);
+        assert_eq!(blockchain.tip(), block_2.hash());
 
+        let block_3 = generate_random_block(&block_2.hash());
+        blockchain.insert(&block_3);
+        assert_eq!(blockchain.tip(), block_3.hash());
+
+        let block_4 = generate_random_block(&block.hash());
+        println!("{:?}", block_4.hash());
+        blockchain.insert(&block_4);
+        assert_eq!(blockchain.tip(), block_3.hash());
+
+        let block_5 = generate_random_block(&block_4.hash());
+        println!("{:?}", block_5.hash());
+        blockchain.insert(&block_5);
+        assert_eq!(blockchain.tip(), block_3.hash());
+
+        let block_6 = generate_random_block(&block_5.hash());
+        println!("{:?}", block_6.hash());
+        blockchain.insert(&block_6);
+
+        let longest_chain = blockchain.all_blocks_in_longest_chain();
+        println!("{:?}", longest_chain);
+
+        assert_eq!(blockchain.tip(), block_6.hash());
     }
+
+    
 }

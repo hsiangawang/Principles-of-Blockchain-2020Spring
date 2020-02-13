@@ -113,11 +113,11 @@ pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size
     }
 
     if cur_hash == *root {
-        println!("{}", "true");
+        //println!("{}", "true");
         return true;
     }
     else {
-        println!("{}", "false");
+        //println!("{}", "false");
         return false;
     }
     
