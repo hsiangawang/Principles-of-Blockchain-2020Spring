@@ -19,6 +19,8 @@ use std::net;
 use std::process;
 use std::thread;
 use std::time;
+use std::sync::{Arc, Mutex};
+use crate::blockchain::Blockchain;
 
 fn main() {
     // parse command line arguments
@@ -81,8 +83,14 @@ fn main() {
     worker_ctx.start();
 
     // start the miner
+
+    // add block chain in Context struct @ miner.rs, so we need to create a new blockchain here
+    let new_blockchain = Blockchain::new();
+    let sync_blockchain = Arc::new(Mutex::new(new_blockchain));
+
     let (miner_ctx, miner) = miner::new(
         &server,
+        &sync_blockchain,
     );
     miner_ctx.start();
 

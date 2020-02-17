@@ -2,7 +2,7 @@ use serde::{Serialize, Deserialize};
 use crate::crypto::hash::{H256, Hashable};
 use crate::crypto::merkle::{MerkleTree};
 use crate::transaction::{Transaction};
-use crate::transaction::tests::generate_random_transaction;
+//use crate::transaction::tests::generate_random_transaction;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
@@ -15,7 +15,7 @@ pub struct Header {
 	pub parent : H256,
 	pub nonce : u32,
 	pub difficulty : H256,
-	pub timestamp : u64,
+	pub timestamp : u128,
 	pub merkle_root : H256,
 }
 
@@ -59,7 +59,14 @@ pub mod test {
     	let mut difficulty_glob = hex!("0101010101010101010101010101010101010101010101010101010101010202").into();
     	let mut clock_glob = 1;
     	let mut transactions: Vec<Transaction> = Vec::new();
-    	transactions.push(generate_random_transaction());
+    	//transactions.push(generate_random_transaction()); // comment to make it compiles
+        let mut rng = rand::thread_rng();
+        let In : u8 = rng.gen();
+        let Out : u8 = rng.gen();
+        //println!("{:?}", In);
+        //println!("{:?}", Out);
+        let transaction = Transaction{Input: In, Output: Out};
+        transactions.push(transaction);
     	let merkle_tree = MerkleTree::new(&transactions);
     	let root = merkle_tree.root();
  

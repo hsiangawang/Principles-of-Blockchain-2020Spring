@@ -5,8 +5,8 @@ use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm,
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
-    Input : u8,
-    Output : u8,
+    pub Input : u8,
+    pub Output : u8,
 }
 
 /// Create digital signature of a transaction

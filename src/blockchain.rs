@@ -2,18 +2,21 @@ use crate::crypto::hash::{H256, Hashable};
 use crate::crypto::merkle::{MerkleTree};
 use crate::block::{Block, Header, Content};
 use crate::transaction::{Transaction};
-use crate::transaction::tests::generate_random_transaction;
+use crate::crypto::hash::generate_random_hash;
+//use transaction::tests::generate_random_transaction;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 extern crate rand;
 use rand::Rng;
 
+
+
 pub struct Blockchain {
-    hash_blocks : HashMap<H256, Block>,
+    pub hash_blocks : HashMap<H256, Block>,
     genesis : Block,
     tip : H256,
-    blocks_height : HashMap<H256, u8>,
-    next_len : u8,
+    blocks_height : HashMap<H256, u16>,
+    pub next_len : u16,
 }
 
 impl Blockchain {
@@ -21,16 +24,25 @@ impl Blockchain {
     pub fn new() -> Self {
 
         let mut hash_blocks: HashMap<H256, Block> = HashMap::new();
-        let mut blocks_height: HashMap<H256, u8> = HashMap::new();
+        let mut blocks_height: HashMap<H256, u16> = HashMap::new();
         let mut tip : H256;
-        let mut next_len = 1;
+        let mut next_len : u16 = 1;
 
         let mut rng = rand::thread_rng();
         let nonce : u32 = rng.gen();
-        let Parent = hex!("0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0a").into();
-        let difficulty_glob = hex!("010101010101010101010101010101010101010101010101010101010101020a").into();
+        //let Parent = hex!("0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0a").into();
+        //let difficulty_glob = hex!("010101010101010101010101010101010101010101010101010101010101020a").into();
+        let Parent = generate_random_hash();
+        let difficulty_glob = generate_random_hash();
         let mut transactions: Vec<Transaction> = Vec::new();
-        transactions.push(generate_random_transaction());
+        //transactions.push(crate::transaction::tests::generate_random_transaction());
+        let mut rng = rand::thread_rng();
+        let In : u8 = rng.gen();
+        let Out : u8 = rng.gen();
+        //println!("{:?}", In);
+        //println!("{:?}", Out);
+        let transaction = Transaction{Input: In, Output: Out};
+        transactions.push(transaction);
         let merkle_tree = MerkleTree::new(&transactions);
         let root = merkle_tree.root();
  
@@ -72,7 +84,7 @@ impl Blockchain {
 
         let mut pointer : H256 = self.tip;
         
-        let genesis_parent = hex!("0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0a").into();
+        let genesis_parent = self.genesis.header.parent;
 
         while pointer != genesis_parent
         {
@@ -130,5 +142,5 @@ mod tests {
         assert_eq!(blockchain.tip(), block_6.hash());
     }
 
-    
+
 }

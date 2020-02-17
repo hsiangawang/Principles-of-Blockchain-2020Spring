@@ -107,6 +107,15 @@ impl PartialOrd for H256 {
     }
 }
 
+pub fn generate_random_hash() -> H256 {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+        let mut raw_bytes = [0; 32];
+        raw_bytes.copy_from_slice(&random_bytes);
+        (&raw_bytes).into()
+    }
+
 #[cfg(any(test, test_utilities))]
 pub mod tests {
     use super::H256;
