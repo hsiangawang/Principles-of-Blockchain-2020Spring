@@ -75,18 +75,20 @@ fn main() {
             error!("Error parsing P2P workers: {}", e);
             process::exit(1);
         });
+
+        // add block chain in Context struct @ miner.rs, so we need to create a new blockchain here
+    let new_blockchain = Blockchain::new();
+    let sync_blockchain = Arc::new(Mutex::new(new_blockchain));
+
     let worker_ctx = worker::new(
         p2p_workers,
         msg_rx,
         &server,
+        &sync_blockchain,
     );
     worker_ctx.start();
 
     // start the miner
-
-    // add block chain in Context struct @ miner.rs, so we need to create a new blockchain here
-    let new_blockchain = Blockchain::new();
-    let sync_blockchain = Arc::new(Mutex::new(new_blockchain));
 
     let (miner_ctx, miner) = miner::new(
         &server,

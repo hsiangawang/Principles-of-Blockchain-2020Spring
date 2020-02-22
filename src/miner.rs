@@ -5,6 +5,7 @@ use crate::block::{Block, Content, Header};
 use crate::crypto::merkle::{MerkleTree};
 use crate::transaction::{Transaction};
 use crate::crypto::hash::{H256, Hashable};
+use crate::network::message::Message;
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
 use std::time;
 use std::sync::{Arc, Mutex};
@@ -137,12 +138,16 @@ impl Context {
             let content = Content{data : transactions};
             let header = Header{parent : parent, nonce : nonce, difficulty : difficulty, timestamp : timestamp, merkle_root : merkletree.root(
                 )};
-            let new_block = Block{header : header, content : content};
+            let new_block = Block{header : header, content : content}; //
 
+            println!("{:?}", difficulty);
             if(new_block.hash() <= difficulty)
             {
                 self.blockchain.lock().unwrap().insert(&new_block);
-                println!("{:?}", self.blockchain.lock().unwrap().next_len);
+                println!("{:?}", self.blockchain.lock().unwrap().next_len - 1);
+                let mut new_blockHash: Vec<H256> = Vec::new();
+                new_blockHash.push(new_block.hash());
+                self.server.broadcast(Message::NewBlockHashes(new_blockHash));
             }
 
             if let OperatingState::Run(i) = self.operating_state {
