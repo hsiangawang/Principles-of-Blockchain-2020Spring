@@ -94,6 +94,7 @@ impl Context {
 
     fn miner_loop(&mut self) {
         // main mining loop
+        let mut block_counter = 0;
         loop {
             // check and react to control signals
             match self.operating_state {
@@ -140,13 +141,15 @@ impl Context {
                 )};
             let new_block = Block{header : header, content : content}; //
 
-            println!("{:?}", difficulty);
+            println!("The block mined: {}", block_counter);
             if(new_block.hash() <= difficulty)
             {
+                block_counter += 1;
                 self.blockchain.lock().unwrap().insert(&new_block);
-                println!("{:?}", self.blockchain.lock().unwrap().next_len - 1);
+                //println!("{:?}", self.blockchain.lock().unwrap().next_len - 1);
                 let mut new_blockHash: Vec<H256> = Vec::new();
                 new_blockHash.push(new_block.hash());
+                //let longest_chain = self.blockchain.lock().unwrap().all_blocks_in_longest_chain();
                 self.server.broadcast(Message::NewBlockHashes(new_blockHash));
             }
 

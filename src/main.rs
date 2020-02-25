@@ -79,6 +79,8 @@ fn main() {
         // add block chain in Context struct @ miner.rs, so we need to create a new blockchain here
     let new_blockchain = Blockchain::new();
     let sync_blockchain = Arc::new(Mutex::new(new_blockchain));
+    //let worker_b = Arc::clone(&sync_blockchain);
+    //let miner_b = Arc::clone(&sync_blockchain);
 
     let worker_ctx = worker::new(
         p2p_workers,

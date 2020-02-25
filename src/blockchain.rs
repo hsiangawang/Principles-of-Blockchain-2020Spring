@@ -1,4 +1,6 @@
 use crate::crypto::hash::{H256, Hashable};
+use serde::{Serialize, Deserialize};
+use std::convert::TryInto;
 use crate::crypto::merkle::{MerkleTree};
 use crate::block::{Block, Header, Content};
 use crate::transaction::{Transaction};
@@ -13,9 +15,9 @@ use rand::Rng;
 
 pub struct Blockchain {
     pub hash_blocks : HashMap<H256, Block>,
-    genesis : Block,
-    tip : H256,
-    blocks_height : HashMap<H256, u16>,
+    pub genesis : Block,
+    pub tip : H256,
+    pub blocks_height : HashMap<H256, u16>,
     pub next_len : u16,
 }
 
@@ -29,16 +31,27 @@ impl Blockchain {
         let mut next_len : u16 = 1;
 
         let mut rng = rand::thread_rng();
-        let nonce : u32 = rng.gen();
-        //let Parent = hex!("0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0a").into();
-        //let difficulty_glob = hex!("010101010101010101010101010101010101010101010101010101010101020a").into();
-        let Parent = generate_random_hash();
-        let difficulty_glob = generate_random_hash();
+        let nonce : u32 = 0;
+        
+        //to hard-code the blockchain difficulty and parent
+        let random_diff: Vec<u8> = (0..32).map(|_| 10).collect();
+        let mut raw_bytes = [0; 32];
+        raw_bytes.copy_from_slice(&random_diff);
+        let difficulty_glob =(&raw_bytes).into();
+
+        let random_parent: Vec<u8> = (0..32).map(|_| 1).collect();
+        let mut raw_bytes_parent = [0; 32];
+        raw_bytes_parent.copy_from_slice(&random_diff);
+        let Parent =(&raw_bytes_parent).into();
+        
+        //
+        //let Parent = generate_random_hash();
+        //let difficulty_glob = generate_random_hash();
         let mut transactions: Vec<Transaction> = Vec::new();
         //transactions.push(crate::transaction::tests::generate_random_transaction());
         let mut rng = rand::thread_rng();
-        let In : u8 = rng.gen();
-        let Out : u8 = rng.gen();
+        let In : u8 = 0;
+        let Out : u8 = 0;
         //println!("{:?}", In);
         //println!("{:?}", Out);
         let transaction = Transaction{Input: In, Output: Out};
@@ -62,7 +75,9 @@ impl Blockchain {
     /// Insert a block into blockchain
     pub fn insert(&mut self, block: &Block) {
         self.hash_blocks.insert(block.hash(), block.clone());
+        //println!("{:?}", "before find parent");
         let parent_height = self.blocks_height[&block.header.parent];
+        //println!("{:?}", "after find parent");
         self.blocks_height.insert(block.hash(), parent_height + 1);
         //self.blocks_height.insert(block.hash(), self.next_len);
         if(self.blocks_height[&block.hash()] > self.blocks_height[&self.tip])
@@ -78,7 +93,7 @@ impl Blockchain {
     }
 
     /// Get the last block's hash of the longest chain
-    #[cfg(any(test, test_utilities))]
+    ///#[cfg(any(test, test_utilities))]
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
         let mut longest_chain: Vec<H256> = Vec::new();
 
