@@ -141,10 +141,11 @@ impl Context {
                 )};
             let new_block = Block{header : header, content : content}; //
 
-            println!("The block mined: {}", block_counter);
+            //println!("The current number of blocks mined: {} blocks", block_counter);
             if(new_block.hash() <= difficulty)
             {
                 block_counter += 1;
+                println!("The current number of blocks mined: {} blocks", block_counter);
                 self.blockchain.lock().unwrap().insert(&new_block);
                 //println!("{:?}", self.blockchain.lock().unwrap().next_len - 1);
                 let mut new_blockHash: Vec<H256> = Vec::new();
