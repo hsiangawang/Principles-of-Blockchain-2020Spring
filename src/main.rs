@@ -9,6 +9,7 @@ pub mod crypto;
 pub mod miner;
 pub mod network;
 pub mod transaction;
+pub mod TransGen;
 
 use clap::clap_app;
 use crossbeam::channel;
@@ -20,7 +21,10 @@ use std::process;
 use std::thread;
 use std::time;
 use std::sync::{Arc, Mutex};
-use crate::blockchain::Blockchain;
+use crate::blockchain::{Blockchain, State};
+use crate::crypto::hash::{H256, H160, Hashable};
+use crate::transaction::{Transaction, SignedTransaction};
+use std::collections::HashMap;
 
 fn main() {
     // parse command line arguments
@@ -77,16 +81,22 @@ fn main() {
         });
 
         // add block chain in Context struct @ miner.rs, so we need to create a new blockchain here
+
+    
     let new_blockchain = Blockchain::new();
     let sync_blockchain = Arc::new(Mutex::new(new_blockchain));
-    //let worker_b = Arc::clone(&sync_blockchain);
-    //let miner_b = Arc::clone(&sync_blockchain);
+    let mut hash_signedTxs: HashMap<H256, SignedTransaction> = HashMap::new();
+    let mempool = Arc::new(Mutex::new(hash_signedTxs));
+    let states = State::new();
+    let sync_states =  Arc::new(Mutex::new(states));
 
     let worker_ctx = worker::new(
         p2p_workers,
         msg_rx,
         &server,
         &sync_blockchain,
+        &mempool,
+        &sync_states,
     );
     worker_ctx.start();
 
@@ -95,8 +105,17 @@ fn main() {
     let (miner_ctx, miner) = miner::new(
         &server,
         &sync_blockchain,
+        &mempool,
+        &sync_states,
     );
     miner_ctx.start();
+
+    let generator_ctx = TransGen::new(
+        &server,
+        &mempool,
+        &sync_states,
+    );
+    generator_ctx.start();
 
     // connect to known peers
     if let Some(known_peers) = matches.values_of("known_peer") {

@@ -11,7 +11,16 @@ pub trait Hashable {
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
 pub struct H256([u8; 32]); // big endian u256 , I add "pub" in front of [u8;32]
 
+#[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
+pub struct H160([u8; 20]);
+
 impl Hashable for H256 {
+    fn hash(&self) -> H256 {
+        ring::digest::digest(&ring::digest::SHA256, &self.0).into()
+    }
+}
+
+impl Hashable for H160 {
     fn hash(&self) -> H256 {
         ring::digest::digest(&ring::digest::SHA256, &self.0).into()
     }
@@ -45,7 +54,24 @@ impl std::fmt::Debug for H256 {
     }
 }
 
+//Dubug format for H160
+impl std::fmt::Debug for H160 {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{:>02x}{:>02x}..{:>02x}{:>02x}",
+            &self.0[0], &self.0[1], &self.0[18], &self.0[19]
+        )
+    }
+}
+
 impl std::convert::AsRef<[u8]> for H256 {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl std::convert::AsRef<[u8]> for H160 {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
@@ -59,9 +85,34 @@ impl std::convert::From<&[u8; 32]> for H256 {
     }
 }
 
+//for H160
+impl std::convert::From<&[u8; 20]> for H160 {
+    fn from(input: &[u8; 20]) -> H160 {
+        let mut buffer: [u8; 20] = [0; 20];
+        buffer[..].copy_from_slice(input);
+        H160(buffer)
+    }
+}
+
+impl std::convert::From<&[u8]> for H160 {
+    fn from(input: &[u8]) -> H160 {
+        let mut buffer: [u8; 20] = [0; 20];
+        buffer[..].copy_from_slice(input);
+        H160(buffer)
+    }
+}
+
 impl std::convert::From<&H256> for [u8; 32] {
     fn from(input: &H256) -> [u8; 32] {
         let mut buffer: [u8; 32] = [0; 32];
+        buffer[..].copy_from_slice(&input.0);
+        buffer
+    }
+}
+
+impl std::convert::From<&H160> for [u8; 20] {
+    fn from(input: &H160) -> [u8; 20] {
+        let mut buffer: [u8; 20] = [0; 20];
         buffer[..].copy_from_slice(&input.0);
         buffer
     }
@@ -73,8 +124,21 @@ impl std::convert::From<[u8; 32]> for H256 {
     }
 }
 
+//for H160
+impl std::convert::From<[u8; 20]> for H160 {
+    fn from(input: [u8; 20]) -> H160 {
+        H160(input)
+    }
+}
+
 impl std::convert::From<H256> for [u8; 32] {
     fn from(input: H256) -> [u8; 32] {
+        input.0
+    }
+}
+
+impl std::convert::From<H160> for [u8; 20] {
+    fn from(input: H160) -> [u8; 20] {
         input.0
     }
 }
@@ -84,6 +148,14 @@ impl std::convert::From<ring::digest::Digest> for H256 {
         let mut raw_hash: [u8; 32] = [0; 32];
         raw_hash[0..32].copy_from_slice(input.as_ref());
         H256(raw_hash)
+    }
+}
+
+impl std::convert::From<ring::digest::Digest> for H160 {
+    fn from(input: ring::digest::Digest) -> H160 {
+        let mut raw_hash: [u8; 20] = [0; 20];
+        raw_hash[0..20].copy_from_slice(input.as_ref());
+        H160(raw_hash)
     }
 }
 

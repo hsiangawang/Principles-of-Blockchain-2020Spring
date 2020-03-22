@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use crate::crypto::hash::{H256, Hashable};
 use crate::crypto::merkle::{MerkleTree};
-use crate::transaction::{Transaction};
+use crate::transaction::{Transaction, SignedTransaction};
 //use crate::transaction::tests::generate_random_transaction;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -21,7 +21,7 @@ pub struct Header {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Content {
-	pub data : Vec<Transaction>,
+	pub data : Vec<SignedTransaction>,
 }
 
 impl Hashable for Transaction {
@@ -30,6 +30,14 @@ impl Hashable for Transaction {
         ring::digest::digest(&ring::digest::SHA256, &encoded).into()
     }
 }
+
+impl Hashable for SignedTransaction {
+    fn hash(&self) -> H256 {
+    	let encoded = bincode::serialize(&self).unwrap();
+        ring::digest::digest(&ring::digest::SHA256, &encoded).into()
+    }
+}
+
 
 impl Hashable for Header {
     fn hash(&self) -> H256 {

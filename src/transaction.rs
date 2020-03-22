@@ -1,12 +1,22 @@
 use serde::{Serialize,Deserialize};
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
+use crate::crypto::hash::{H256, H160, Hashable};
 
 
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
-    pub Input : u8,
-    pub Output : u8,
+    pub recipAddress : H160,
+    pub val : u32,
+    pub accountNonce : u16,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct SignedTransaction {
+    pub Transaction : Transaction,
+    pub public_key : Vec<u8>,
+    pub Signature :  Vec<u8>, // by function into_vec
+    pub sender_addr : H160,
 }
 
 /// Create digital signature of a transaction
@@ -21,7 +31,7 @@ pub fn sign(t: &Transaction, key: &Ed25519KeyPair) -> Signature {
 }
 
 /// Verify digital signature of a transaction, using public key instead of secret key
-pub fn verify(t: &Transaction, public_key: &<Ed25519KeyPair as KeyPair>::PublicKey, signature: &Signature) -> bool {
+/*pub fn verify(t: &Transaction, public_key: &<Ed25519KeyPair as KeyPair>::PublicKey, signature: &Signature) -> bool {
 
     let peer_public_key_bytes = public_key.as_ref();
     //println!("{:?}", peer_public_key_bytes);
@@ -29,6 +39,20 @@ pub fn verify(t: &Transaction, public_key: &<Ed25519KeyPair as KeyPair>::PublicK
     let encoded = bincode::serialize(t).unwrap();
     let res = peer_public_key.verify(&encoded, signature.as_ref());
     //println!("{:?}", res);
+    match res {
+        Ok(v) => return true,
+        Err(e) => return false,
+    }
+    //unimplemented!()
+}*/
+
+pub fn verify(t: &Transaction, public_key: &Vec<u8>, signature: &Vec<u8>) -> bool {
+
+    let peer_public_key_bytes : &[u8] = &public_key;
+    let peer_public_key = ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, peer_public_key_bytes);
+    let encoded = bincode::serialize(t).unwrap();
+    let signature_bytes : &[u8] = &signature;
+    let res = peer_public_key.verify(&encoded, signature_bytes);
     match res {
         Ok(v) => return true,
         Err(e) => return false,

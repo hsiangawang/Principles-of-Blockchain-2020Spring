@@ -1,10 +1,10 @@
 use crate::network::server::Handle as ServerHandle;
 use log::info;
-use crate::blockchain::Blockchain;
+use crate::blockchain::{Blockchain, State};
 use crate::block::{Block, Content, Header};
 use crate::crypto::merkle::{MerkleTree};
-use crate::transaction::{Transaction};
-use crate::crypto::hash::{H256, Hashable};
+use crate::transaction::{Transaction, SignedTransaction};
+use crate::crypto::hash::{H256, H160, Hashable};
 use crate::network::message::Message;
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
 use std::time;
@@ -12,6 +12,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 extern crate rand;
 use rand::Rng;
+use crate::crypto::key_pair;
+use crate::transaction::sign;
+use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
+use std::collections::HashMap;
+
 
 enum ControlSignal {
     Start(u64), // the number controls the lambda of interval between block generation
@@ -30,6 +35,8 @@ pub struct Context {
     operating_state: OperatingState,
     server: ServerHandle,
     blockchain : Arc<Mutex<Blockchain>>,
+    mempool : Arc<Mutex<HashMap<H256, SignedTransaction>>>,
+    states : Arc<Mutex<State>>,
 }
 
 #[derive(Clone)]
@@ -38,7 +45,7 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle) {
+pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>, mempool: &Arc<Mutex<HashMap<H256, SignedTransaction>>>, states: &Arc<Mutex<State>>) -> (Context, Handle) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
 
     let ctx = Context {
@@ -46,6 +53,8 @@ pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>) -> (Conte
         operating_state: OperatingState::Paused,
         server: server.clone(),
         blockchain: Arc::clone(blockchain),
+        mempool: Arc::clone(mempool),
+        states: Arc::clone(states),
     };
 
     let handle = Handle {
@@ -128,28 +137,73 @@ impl Context {
             }
             let difficulty = self.blockchain.lock().unwrap().hash_blocks[&parent].header.difficulty;
 
-            let mut transactions: Vec<Transaction> = Vec::new();    
             let mut rng = rand::thread_rng();
-            let In : u8 = rng.gen();
-            let Out : u8 = rng.gen();
-            let transaction = Transaction{Input: In, Output: Out};
-            transactions.push(transaction);
-            let merkletree = MerkleTree::new(&transactions);
             let nonce : u32 = rng.gen();
-            let content = Content{data : transactions};
-            let header = Header{parent : parent, nonce : nonce, difficulty : difficulty, timestamp : timestamp, merkle_root : merkletree.root(
-                )};
-            let new_block = Block{header : header, content : content}; //
+            let random_recipient: Vec<u8> = (0..20).map(|_| 1).collect();
+            let mut raw_bytes_recipient = [0; 20];
+            raw_bytes_recipient.copy_from_slice(&random_recipient);
+            let Recipient : H160 =(&raw_bytes_recipient).into();
+            let val : u32 = rng.gen();
+            let mut accountNonce : u16 = 0;
 
-            //println!("The current number of blocks mined: {} blocks", block_counter);
+            //sign the transaction and store it in SignedTransactions vector
+            let transaction = Transaction{recipAddress : Recipient, val : val, accountNonce : accountNonce};
+            let key = key_pair::random();
+            let signature = sign(&transaction, &key);
+            let hash_key : H256 = ring::digest::digest(&ring::digest::SHA256, key.public_key().as_ref()).into();
+            let hash_key_20bytes : H160 = hash_key.as_ref()[12..=31].into();
+            let signed_transaction = SignedTransaction{Transaction: transaction, Signature : signature.as_ref().to_vec(), public_key : key.public_key().as_ref().to_vec(), sender_addr : hash_key_20bytes};
+            
+            //in each block trial, we should remove them if we successfully mine the block
+            let mut SignedTransactions: Vec<SignedTransaction> = Vec::new();
+            let txs_perBlock = 2;
+            let mut counter = 0;
+            for (key, val) in self.mempool.lock().unwrap().iter() {
+                if (counter == txs_perBlock) {
+                    break;
+                }
+                SignedTransactions.push(val.clone());
+                counter += 1;
+            }
+            //SignedTransactions.push(signed_transaction);
+            if (SignedTransactions.len() == 0) {
+                continue;
+            }
+            let merkle_tree = MerkleTree::new(&SignedTransactions);
+            let root = merkle_tree.root();
+     
+            let header = Header{parent : parent, nonce : nonce, difficulty : difficulty, timestamp : 0, merkle_root : root};
+            let content = Content{data : SignedTransactions};
+            let new_block = Block{header : header, content : content};
+
+
             if(new_block.hash() <= difficulty)
             {
                 block_counter += 1;
                 println!("The current number of blocks mined: {} blocks", block_counter);
                 self.blockchain.lock().unwrap().insert(&new_block);
                 //println!("{:?}", self.blockchain.lock().unwrap().next_len - 1);
+
                 let mut new_blockHash: Vec<H256> = Vec::new();
                 new_blockHash.push(new_block.hash());
+                let size = new_block.content.data.len(); // remove corresponding transactions in the blocks
+                for i in (0..size) {
+                    if (self.mempool.lock().unwrap().contains_key(&new_block.content.data[i].hash())) {
+                        self.mempool.lock().unwrap().remove(&new_block.content.data[i].hash());
+
+                        let sender_addr = new_block.content.data[i].sender_addr;
+                        let recver_addr = new_block.content.data[i].Transaction.recipAddress;
+                        let trans_money = new_block.content.data[i].Transaction.val; 
+                        if (self.states.lock().unwrap().accountMaping[&sender_addr].1 >= trans_money) {
+                            if let Some(x) = self.states.lock().unwrap().accountMaping.get_mut(&sender_addr) {
+                                x.1 -= trans_money; 
+                            }
+                            if let Some(y) = self.states.lock().unwrap().accountMaping.get_mut(&recver_addr) {
+                                y.1 += trans_money; 
+                            }
+                        }
+                    }
+                }
                 //let longest_chain = self.blockchain.lock().unwrap().all_blocks_in_longest_chain();
                 self.server.broadcast(Message::NewBlockHashes(new_blockHash));
             }
