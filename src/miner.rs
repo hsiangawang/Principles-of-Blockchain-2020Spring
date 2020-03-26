@@ -15,7 +15,8 @@ use rand::Rng;
 use crate::crypto::key_pair;
 use crate::transaction::sign;
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+
 
 
 enum ControlSignal {
@@ -37,6 +38,7 @@ pub struct Context {
     blockchain : Arc<Mutex<Blockchain>>,
     mempool : Arc<Mutex<HashMap<H256, SignedTransaction>>>,
     states : Arc<Mutex<State>>,
+    txs: Arc<Mutex<VecDeque<SignedTransaction>>>,
 }
 
 #[derive(Clone)]
@@ -45,7 +47,7 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>, mempool: &Arc<Mutex<HashMap<H256, SignedTransaction>>>, states: &Arc<Mutex<State>>) -> (Context, Handle) {
+pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>, mempool: &Arc<Mutex<HashMap<H256, SignedTransaction>>>, states: &Arc<Mutex<State>>, txs: &Arc<Mutex<VecDeque<SignedTransaction>>>) -> (Context, Handle) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
 
     let ctx = Context {
@@ -55,6 +57,7 @@ pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>, mempool: 
         blockchain: Arc::clone(blockchain),
         mempool: Arc::clone(mempool),
         states: Arc::clone(states),
+        txs: Arc::clone(txs),
     };
 
     let handle = Handle {
@@ -103,6 +106,7 @@ impl Context {
 
     fn miner_loop(&mut self) {
         // main mining loop
+        info!("In miner_loop and start to mine blocks...");
         let mut block_counter = 0;
         loop {
             // check and react to control signals
@@ -156,22 +160,27 @@ impl Context {
             
             //in each block trial, we should remove them if we successfully mine the block
             let mut SignedTransactions: Vec<SignedTransaction> = Vec::new();
-            let txs_perBlock = 2;
-            let mut counter = 0;
+            let txs_perBlock = 1;
+            /*let mut counter = 0;
             for (key, val) in self.mempool.lock().unwrap().iter() {
                 if (counter == txs_perBlock) {
                     break;
                 }
                 SignedTransactions.push(val.clone());
                 counter += 1;
-            }
-            //SignedTransactions.push(signed_transaction);
-            if (SignedTransactions.len() == 0) {
+            }*/
+            if (self.txs.lock().unwrap().is_empty()) {
+                println!("txs is empty");
                 continue;
+            }
+            match self.txs.lock().unwrap().front() {
+                Some(tx) => SignedTransactions.push(tx.clone()),
+                None => println!("Front have trouble"),
             }
             let merkle_tree = MerkleTree::new(&SignedTransactions);
             let root = merkle_tree.root();
      
+            //info!("Insert transactions into the block...");
             let header = Header{parent : parent, nonce : nonce, difficulty : difficulty, timestamp : 0, merkle_root : root};
             let content = Content{data : SignedTransactions};
             let new_block = Block{header : header, content : content};
@@ -179,33 +188,46 @@ impl Context {
 
             if(new_block.hash() <= difficulty)
             {
-                block_counter += 1;
-                println!("The current number of blocks mined: {} blocks", block_counter);
-                self.blockchain.lock().unwrap().insert(&new_block);
-                //println!("{:?}", self.blockchain.lock().unwrap().next_len - 1);
-
-                let mut new_blockHash: Vec<H256> = Vec::new();
-                new_blockHash.push(new_block.hash());
                 let size = new_block.content.data.len(); // remove corresponding transactions in the blocks
                 for i in (0..size) {
                     if (self.mempool.lock().unwrap().contains_key(&new_block.content.data[i].hash())) {
-                        self.mempool.lock().unwrap().remove(&new_block.content.data[i].hash());
 
                         let sender_addr = new_block.content.data[i].sender_addr;
                         let recver_addr = new_block.content.data[i].Transaction.recipAddress;
-                        let trans_money = new_block.content.data[i].Transaction.val; 
+                        let trans_money = new_block.content.data[i].Transaction.val;
+                        let nonce = new_block.content.data[i].Transaction.accountNonce; 
+                        
+                        //println!("{:?}", nonce);
+                        //println!("{:?}", self.states.lock().unwrap().accountMaping[&sender_addr].0);
+                        if (nonce != self.states.lock().unwrap().accountMaping[&sender_addr].0 + 1) {
+                            //println!("{:?}", "wrong order");
+                            continue;
+                        }
+
+                        self.mempool.lock().unwrap().remove(&new_block.content.data[i].hash());
+                        self.txs.lock().unwrap().pop_front();
+
                         if (self.states.lock().unwrap().accountMaping[&sender_addr].1 >= trans_money) {
                             if let Some(x) = self.states.lock().unwrap().accountMaping.get_mut(&sender_addr) {
+                                x.0 += 1;
                                 x.1 -= trans_money; 
                             }
                             if let Some(y) = self.states.lock().unwrap().accountMaping.get_mut(&recver_addr) {
                                 y.1 += trans_money; 
                             }
                         }
+                        info!("{:?}", self.states.lock().unwrap().accountMaping);
                     }
+                    block_counter += 1;
+                    println!("The current number of blocks mined: {} blocks", block_counter);
+                    self.blockchain.lock().unwrap().insert(&new_block);
+                    //println!("{:?}", self.blockchain.lock().unwrap().next_len - 1);
+    
+                    let mut new_blockHash: Vec<H256> = Vec::new();
+                    new_blockHash.push(new_block.hash());
+                    //let longest_chain = self.blockchain.lock().unwrap().all_blocks_in_longest_chain();
+                    self.server.broadcast(Message::NewBlockHashes(new_blockHash));
                 }
-                //let longest_chain = self.blockchain.lock().unwrap().all_blocks_in_longest_chain();
-                self.server.broadcast(Message::NewBlockHashes(new_blockHash));
             }
 
             if let OperatingState::Run(i) = self.operating_state {

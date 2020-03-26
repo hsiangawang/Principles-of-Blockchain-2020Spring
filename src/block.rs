@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use crate::crypto::hash::{H256, Hashable};
 use crate::crypto::merkle::{MerkleTree};
 use crate::transaction::{Transaction, SignedTransaction};
+use log::{info};
 //use crate::transaction::tests::generate_random_transaction;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

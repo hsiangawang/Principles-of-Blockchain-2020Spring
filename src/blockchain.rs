@@ -12,6 +12,7 @@ extern crate rand;
 use rand::Rng;
 use crate::transaction::sign;
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
+use log::{info};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct State {

@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use crate::blockchain::{Blockchain, State};
 use crate::crypto::hash::{H256, H160, Hashable};
 use crate::transaction::{Transaction, SignedTransaction};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 fn main() {
     // parse command line arguments
@@ -86,6 +86,9 @@ fn main() {
     let new_blockchain = Blockchain::new();
     let sync_blockchain = Arc::new(Mutex::new(new_blockchain));
     let mut hash_signedTxs: HashMap<H256, SignedTransaction> = HashMap::new();
+    //let mut signedTxs = VecDeque::new();
+    let mut signedTxs: VecDeque<SignedTransaction> = VecDeque::new();
+    let sync_txs = Arc::new(Mutex::new(signedTxs));
     let mempool = Arc::new(Mutex::new(hash_signedTxs));
     let states = State::new();
     let sync_states =  Arc::new(Mutex::new(states));
@@ -97,6 +100,7 @@ fn main() {
         &sync_blockchain,
         &mempool,
         &sync_states,
+        &sync_txs,
     );
     worker_ctx.start();
 
@@ -107,6 +111,7 @@ fn main() {
         &sync_blockchain,
         &mempool,
         &sync_states,
+        &sync_txs,
     );
     miner_ctx.start();
 
@@ -114,6 +119,7 @@ fn main() {
         &server,
         &mempool,
         &sync_states,
+        &sync_txs,
     );
     generator_ctx.start();
 

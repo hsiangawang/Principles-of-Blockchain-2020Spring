@@ -10,9 +10,10 @@ use crate::crypto::hash::{H256, Hashable, H160};
 use std::thread;
 use std::time;
 use serde::{Serialize,Deserialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use crate::transaction::{Transaction, SignedTransaction};
 use crate::transaction::verify;
+use log::{info};
 
 
 pub struct Orphan {
@@ -27,6 +28,7 @@ pub struct Context {
     blockchain : Arc<Mutex<Blockchain>>,
     mempool : Arc<Mutex<HashMap<H256, SignedTransaction>>>,
     states : Arc<Mutex<State>>,
+    txs : Arc<Mutex<VecDeque<SignedTransaction>>>,
 }
 
 pub fn new(
@@ -36,6 +38,7 @@ pub fn new(
     blockchain: &Arc<Mutex<Blockchain>>,
     mempool: &Arc<Mutex<HashMap<H256, SignedTransaction>>>,
     states: &Arc<Mutex<State>>,
+    txs: &Arc<Mutex<VecDeque<SignedTransaction>>>,
 ) -> Context {
     Context {
         msg_chan: msg_src,
@@ -44,6 +47,7 @@ pub fn new(
         blockchain: Arc::clone(blockchain),
         mempool: Arc::clone(mempool),
         states: Arc::clone(states),
+        txs: Arc::clone(txs),
     }
 }
 
@@ -68,7 +72,6 @@ impl Context {
         let mut mark = 0;
         let mut start = 0;
         loop {
-            println!("{:?}", self.states.lock().unwrap().accountMaping);
             //println!("Total blockchain len: {}", self.blockchain.lock().unwrap().hash_blocks.len());
             //println!("Orphan size: {}", orphan.len());
             //println!("sum: {:?}", sum);
@@ -97,7 +100,8 @@ impl Context {
                         }
                     }
                     let longest_chain = self.blockchain.lock().unwrap().all_blocks_in_longest_chain();
-                    println!("{:?}", longest_chain);
+                    info!("{:?}", longest_chain);
+                    //println!("{:?}", longest_chain);
                     println!("Total number of blocks in blockchain: {} blocks", self.blockchain.lock().unwrap().hash_blocks.len());
                     println!("The number of orphan blocks: {} blocks", orphan_buffer.orphan_blocks.len());
                 }
@@ -119,7 +123,8 @@ impl Context {
                         }
                     }
                     let longest_chain = self.blockchain.lock().unwrap().all_blocks_in_longest_chain();
-                    println!("{:?}", longest_chain);
+                    //println!("{:?}", longest_chain);
+                    info!("{:?}", longest_chain);
                     println!("Total number of blocks in blockchain: {} blocks", self.blockchain.lock().unwrap().hash_blocks.len());
                     println!("The number of orphan blocks: {} blocks", orphan_buffer.orphan_blocks.len());
                     peer.write(Message::Blocks(exist_blocks));
@@ -127,6 +132,7 @@ impl Context {
                 }
                 Message::Blocks(blocks) => {
                     debug!("Blocks");
+                    info!("Receiving blocks mined by the other...");
                     let size = blocks.len();
                 
                     let mut orphan_size = orphan_buffer.orphan_blocks.len();
@@ -159,19 +165,34 @@ impl Context {
                             let signedTxs_size = blocks[i].content.data.len();
                             for j in (0..signedTxs_size) {
                                if (self.mempool.lock().unwrap().contains_key(&blocks[i].content.data[j].hash())) {
-                                    self.mempool.lock().unwrap().remove(&blocks[i].content.data[j].hash()); 
+                            
                                     let sender_addr = blocks[i].content.data[j].sender_addr;
                                     let recver_addr = blocks[i].content.data[j].Transaction.recipAddress;
                                     let trans_money = blocks[i].content.data[j].Transaction.val;
+                                    let accountNonce = blocks[i].content.data[j].Transaction.accountNonce;
+
+                                    //Transaction spending check
+                                    //println!("{:?}", accountNonce);
+                                    //println!("{:?}", self.states.lock().unwrap().accountMaping[&sender_addr].0);
+                                    if (accountNonce != self.states.lock().unwrap().accountMaping[&sender_addr].0 + 1) {
+                                        continue;
+                                    }
+
+
+                                    self.mempool.lock().unwrap().remove(&blocks[i].content.data[j].hash()); 
 
                                     if (self.states.lock().unwrap().accountMaping[&sender_addr].1 >= trans_money) {
                                         if let Some(x) = self.states.lock().unwrap().accountMaping.get_mut(&sender_addr) {
+                                            x.0 += 1;
                                             x.1 -= trans_money; 
                                         }
                                         if let Some(y) = self.states.lock().unwrap().accountMaping.get_mut(&recver_addr) {
                                             y.1 += trans_money; 
                                         }
+
                                     }
+                                    println!("{:?}", "new block txs");
+                                    info!("{:?}", self.states.lock().unwrap().accountMaping);
 
                                 } 
                             }
@@ -223,8 +244,53 @@ impl Context {
                                     let dura = (time_diff as f32)/(1000 as f32);
                                     println!("Time elapsed: {:?} seconds", dura.clone());
 
+                                    //To check the block is on the longset chain, 
+                                    //1). If it is on the longest_chain, update the global state
+                                    //2). If is is the fork, use its parent block to calculate temp state and store in chainState
+                                    //3). If the block's parent is not the tip and after the insertion the block is the tip, that means new longest chain
+                                    let prev_tip = self.blockchain.lock().unwrap().tip();
                                     self.blockchain.lock().unwrap().insert(&blocks[i]);
-                                    self.blockchain.lock().unwrap().chainState.insert(blocks[i].hash(), self.states.lock().unwrap().clone());
+                                    if (blocks[i].header.parent == prev_tip) { // condition 1.
+                                        self.blockchain.lock().unwrap().chainState.insert(blocks[i].hash(), self.states.lock().unwrap().clone());
+                                    }
+                                    else { //condition 2 & 3
+                                        let sender_addr = blocks[i].content.data[0].sender_addr;
+                                        let recver_addr = blocks[i].content.data[0].Transaction.recipAddress;
+                                        let trans_money = blocks[i].content.data[0].Transaction.val;
+                                        let accountNonce = blocks[i].content.data[0].Transaction.accountNonce;
+
+                                        if (self.blockchain.lock().unwrap().tip() != blocks[i].hash()) { // condition 2
+                                            let mut parent_state = self.blockchain.lock().unwrap().chainState[&blocks[i].header.parent].clone();
+                                            if (parent_state.accountMaping[&sender_addr].1 >= trans_money) {
+                                                if let Some(x) = parent_state.accountMaping.get_mut(&sender_addr) {
+                                                    x.0 += 1;
+                                                    x.1 -= trans_money; 
+                                                }
+                                                if let Some(y) = parent_state.accountMaping.get_mut(&recver_addr) {
+                                                    y.1 += trans_money; 
+                                                }
+                                            }
+                                            self.blockchain.lock().unwrap().chainState.insert(blocks[i].hash(), parent_state.clone());
+                                            self.states.lock().unwrap().accountMaping = self.blockchain.lock().unwrap().chainState[&prev_tip].accountMaping.clone();
+                                        }
+                                        
+                                        else { // condition 3
+                                            let mut parent_state = self.blockchain.lock().unwrap().chainState[&blocks[i].header.parent].clone();
+                                            if (parent_state.accountMaping[&sender_addr].1 >= trans_money) {
+                                                if let Some(x) = parent_state.accountMaping.get_mut(&sender_addr) {
+                                                    x.0 += 1;
+                                                    x.1 -= trans_money; 
+                                                }
+                                                if let Some(y) = parent_state.accountMaping.get_mut(&recver_addr) {
+                                                    y.1 += trans_money; 
+                                                }
+                                            }
+                                            self.blockchain.lock().unwrap().chainState.insert(blocks[i].hash(), parent_state.clone());
+                                            self.states.lock().unwrap().accountMaping = parent_state.accountMaping.clone();
+                                        }
+                                        
+                                    }
+                                    
                                     //insert new block to blockchain, so we need to remove SignedTransaction inside this block
                                     let size = blocks[i].content.data.len();
                                     for j in (0..size) {
@@ -258,7 +324,7 @@ impl Context {
                         }
                     }
                     let longest_chain = self.blockchain.lock().unwrap().all_blocks_in_longest_chain();
-                    println!("{:?}", longest_chain);
+                    info!("{:?}", longest_chain);
                     println!("Total number of blocks in blockchain: {} blocks", self.blockchain.lock().unwrap().hash_blocks.len());
                     println!("The number of orphan blocks: {} blocks", orphan_buffer.orphan_blocks.len());
                 }
@@ -306,6 +372,7 @@ impl Context {
                         if(verify(&trans[i].Transaction, &trans[i].public_key, &trans[i].Signature)){
                             //put into mempool
                             self.mempool.lock().unwrap().insert(trans[i].hash(), trans[i].clone());
+                            //self.txs.lock().unwrap().push_back(trans[i].clone());
                             new_transHash.push(trans[i].hash());
                         }
                         else {
